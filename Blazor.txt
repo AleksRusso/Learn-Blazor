@@ -1,0 +1,322 @@
+Blazor представляет UI-фреймворк для создания интерактивных приложений, которые могут работать как на стороне сервера, так и на стороне клиента, на платформе .NET
+
+-- компонентно-ориентированное программирование
+
+Функционально на текущий момент Blazor подразделяется на несколько подсистем:
+
+	Blazor Server: позволяет создавать серверные приложения и поддерживается ASP.NET (SignalR)
+
+	Blazor WebAssembly: позволяет создавать одностраничные интерактивные приложения клиентской стороны, которые запускаются в браузере пользователя и работают с помощью технологии WebAssembly
+
+	Blazor Hybrid: позволяет создавать десктопные и мобильные приложения поверх технологии .NET MAUI
+	
+Содержание проекта  Blazor Server App:
+	launchSettings.json - файл для запуска проекта (первичная настройка)
+	wwwroot - файлы стилей
+	Data - модели 
+	Pages - страницы
+		_Host.cshtml								- настройки
+		_Layout.cshtml								- основной шаблон html (<meta charset="utf-8" /> и т.д.)
+		Counter.razor(Error, FetchData, Index)		- компоненты
+	Shared											- хранит общие компоненты проекта
+		MainLayout.razor							- продолжение шаблона html ( <NavMenu /> и т.д.)
+		NavMenu.razor								- меню проекта
+		SurveyPrompt.razor							- компонент(кусочек проекта) 
+	_Imports.razor									- файл для подключения нужных пространств имён
+	App.razor										- если адресс найден, то MainLayout, если нет, то NotFound
+	appsettings.json								- файл конфигурации
+	Program.cs										- запуск программы
+	
+	
+				Проект
+
+_Imports.razor		-> @using GameIndustry.Models							- чтобы можно было использовать повсюду
+Index.razor			-> <GameListTable Games="games"/>						- для вставки компонента в Index (используемый параметр = передаваемые данные)
+GameListTable.razor -> [Parameter] public List<Game> Games { get; set; }	- данные можно менять, используя параметр 
+					-> protected async override Task OnInitializedAsync()	- перед запуском страницы (ассинхронныый: 
+@if (games == null)
+{
+    <tr>Load...</tr>
+}
+else if (games.Count == 0)
+{
+    <tr> No items</tr>
+}
+else 
+{...)
+					-> <InputCheckbox @onchange="( () => displayButtons = !displayButtons)"/> - анонимный метод, который меняет значение
+
+IndividualGame.razor	-> <button class="btn btn-danger" @onclick="Delete">Delete</button> - оброботка на стороне браузера(удаление)
+Counter.razor			-> <input type="number"class="form-control-lg" @bind-value="currentCount" @bind-value:event="onchange" /> - тоже что и @bind="currentCount", но можно использовать свой метод
+
+@onkeypress="((KeyboardEventArgs args) => myfunction(args))" - метод для работы с клавиатурой
+
+EventCallback - можно вызвать метод из одного компонента в другой компонент 
+	IndividualGame.razor -> <button class="btn btn-danger" @onclick="(() => DeleteGame.InvokeAsync(Game))">Delete</button>
+						 -> [Parameter] public Game Game { get; set; }
+						 -> [Parameter] public EventCallback<Game> DeleteGame { get; set; }
+	GameListTable.razor  -> <IndividualGame Game="item" IsTable="true" DisplayButtons=displayButtons DeleteGame="DeleteTheGame"/>
+						 -> void DeleteTheGame(Game game)
+{
+    Games.Remove(game);
+}
+
+
+RenderFragment - можно вызвать фрагмент кода из одного компонента в другой 
+	GameListTable.razor  -> <tr>@ChildContent</tr>
+						 -> [Parameter] public RenderFragment ChildContent { get; set; }
+						 
+	Index.razor			 -> <GameListTable Games="games">
+    <ChildContent>
+        <tr><span style="text-align: center; color: red; font-weight: bolder">Element Loading ...</span></tr>
+    </ChildContent>
+</GameListTable>
+						
+
+generic render fragment - можно создать компонент, который может принимать любой тип и рендерить его:
+GenericComponent.razor ->
+@typeparam TItem
+
+<div class="generic-component">
+    @if (ItemTemplate != null)
+    {
+        @ItemTemplate(Item)
+    }
+</div>
+
+@code {
+    [Parameter] public TItem Item { get; set; }
+    [Parameter] public RenderFragment<TItem> ItemTemplate { get; set; }
+}
+
+использование:
+<GenericComponent TItem="string" Item="Hello, World!" ItemTemplate="@(context => <span>@context</span>)" />
+<GenericComponent TItem="int" Item="123" ItemTemplate="@(context => <span>Number: @context</span>)" />
+
+Жизненный цикл компонентов - методы, которые выполняются последовательно:
+	protected override void OnInitialized() - метод, который выполняется сразу после появления компнента
+	protected override void OnParametersSet() - метод, который вызывается после OnInitialized или вызывается каждый раз после изменения каких-либо параметров(которые перезаписываются) в странице
+	protected override void OnAfterRender(bool firstRender) - метод, который проверяет 1й раз отрисовывается или какая нибудь её часть 
+	protected override bool ShouldRender() - метод, который вкл/откл возможность повторной перерисовки компонента
+
+
+Внедрение зависимостей:
+	@inject HttpClient client - пример внедрения зависимостей в компоненты в Blazor(кроме 3, нужно в Program.cs сконфигурировать зависимость)
+	Если есть класс для внедрения зависимости, то его обязательно нужно сконфигурировать в Program.cs 
+
+	
+Жизненный цикл сервисов:
+	builder.Services.AddScoped - при первом обращении к сервису он создаёт один объект, а затем все остальные обращения будут к этому объекту
+	builder.Services.AddTransient - при каждом обращении к сервису создаётся новый объект сервиса и будет использоваться этот новый объект	
+	builder.Services.AddSingleton - на протежении всей сессии создаётся один единственный объект и только он используется
+	
+	Пример:
+	Services.cs
+	namespace GameIndustry
+{
+    public class TransientService
+    {
+        public int Value { get; set; }
+    }
+    public class SingletonService
+    {
+        public int Value { get; set; }
+    }
+}
+
+	сконфигурируем созданные сервисы:
+	Program.cs
+	builder.Services.AddSingleton<SingletonService>();
+	builder.Services.AddTransient<TransientService>();
+	
+	внедрение наших зависимостей:
+	Counter.razor
+	@inject SingletonService singleton
+	@inject TransientService transient
+	
+	<div class="row mt-3">
+    <div class="col-6 text-center alert-primary">
+        Singleton count: @singleton.Value
+    </div>
+    <div class="col-6 text-center alert-primary">
+        Transient count: @transient.Value
+    </div>
+	</div>
+	
+	@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        currentCount++;
+
+        singleton.Value = currentCount;
+        transient.Value = currentCount;
+    }
+	}
+	
+	
+	после обновления страницы значение Singleton не меняется, а значение Transient обновляется на 0 
+
+
+Частичный класс - можно использовать для разделения кода:
+	Создать класс с таким же названием что и родительский класс и добавить .cs - Counter.razor.cs
+	
+	перенести нужные коды в него: [Inject] SingletonService singleton {  get; set; } и т.д.
+	
+	
+Ссылка на компонент - 
+	Пример:
+	ссылка для <GameListTable Games="games" /> 
+	-> GameListTable gameList - добавляем приватное поле с возвращаемым типом 
+	<GameListTable Games="games" @ref="gameList"/> 
+	ElementReference gameList; - для ссылки на элемент используется @ref и ElementReference
+	
+
+Каскадные параметры - предоставляет компоненту-предку удобный способ передать значения(даже объекты классов) всем его компонентам-потомкам:
+		
+		MainLayout.razor -> 
+		<CascadingValue Value="Color" Name="Color"> -- Value - значение, Name - название для каждого каскадного параметра 
+			@Body
+		</CascadingValue>
+		 string Color = "blue";
+	
+		Counter.razor.cs -> 
+	    [CascadingParameter(Name ="Color")] public string Color { get; set; }
+		
+		Counter.razor -> 
+		 <h1 style="color: @Color">COUNTER</h1>
+		 
+	void ChangeTableStyle(ChangeEventArgs currentItem) - системный класс, который передаёт объект типа object
+	
+
+Timer:
+	Пример:
+	@using System.Timers;
+	
+	Timer timer;
+	protected override void OnInitialized()
+	{
+		timer = new Timer();
+		timer.Interval = 100;
+		timer.Elapsed += ElapsedTImer; -- что должно выполняться после интервала
+		timer.Start();
+	}
+
+	void ElapsedTimer(object sender, ElapsedEventArgs args)- 1 параметр - тот объект который вызвал событие, 2... 
+	
+	@implements IDisposable -- Интерфейс IDisposable предназначен для освобождения ресурсов, таких как неуправляемые ресурсы или другие объекты, требующие очистки, когда объект больше не нужен 
+	public void Dispose()
+	{
+		if (timer != null)
+			timer.Dispose();
+	}
+	
+	
+StateHasChanged(); - это метод в Blazor, который сигнализирует компоненту, что его состояние изменилось, и его нужно перерисовать (обновить). Но чтобы таймер работал, нужно чтобы он был  ассинхронным -  await InvokeAsync(StateHasChanged);
+
+
+
+
+
+
+
+
+								Модуль 2
+<hr /> - линия горизонтальная
+
+@page "/"
+@page "/index" - два маршрута на один компонент
+
+@inject NavigationManager navManager — это служба, предоставляемая Blazor для работы с навигацией, то есть для перехода между страницами приложения.
+	Пример:
+	void AddNewGame()
+	{
+		navManager.NavigateTo("games");
+	}
+	
+чтобы передать параметр в url:
+	@page "/games/{GameId:int}"  - какое-нибудь название с явным указанием типа, но нельзя устанавливать во второй раз тип!!! @page "/games/{GameId:int}/{GameName}" 
+
+	@page "/user/{name}/{age:int?}"	- необязательный параметр age
+	
+	@page "/user/{*info}" - любой тип(из-за *)
+
+	https://localhost:7134/user?name=Tom&age=38 - пример использования ? и &
+
+	@code {
+		[Parameter] public int GameId { get; set; }
+	}
+	
+В EditForm - используется для проверки валидации: 
+ <EditForm Model="genre" OnValidSubmit="Create"> //или можно использовать OnInvalidSubmit, OnSubmit 
+     <DataAnnotationsValidator /> - чтобы проверить валидацию на основе аннотации
+     <div class="form-group">
+         <label>Name:</label>
+         <div>
+             <InputText class="form-control" @bind-Value="genre.Name" ParsingErrorMessage="Введите текст а не число!" /> - для вывода ошибки парсинга
+             <ValidationMessage For="(() => genre.Name)"></ValidationMessage> - для вывода ошибок на основе аннотации (либо компонент компонент <ValidationSummary/>)
+         </div>
+     </div>
+     <button class="btn btn-outline-primary">Save</button>
+ </EditForm>
+ 
+ Чтобы создать свой класс с валидацией нужно наследовать ValidationAttribute и в методе обработки выводит либо return new ValidationResult("Некорректное имя!"); либо return ValidationResult.Success;
+
+ 
+
+Вместо Model можно использовать EditContext(Предоставляет больший контроль над процессом редактирования)
+ 
+ 
+				Для работы с файлами 
+пакет Nuget - Tewr.Blazor.FileReader
+
+@using Tewr.Blazor.FileReader
+@inject IFileReaderService _fileReader 
+
+https://www.youtube.com/watch?v=223vW18-hhc&list=PLrTvxXQSRKAMAotVG4HV5jwNScrhYepKc&index=13
+ 
+			
+			Метанит
+Использование @bind:get и @bind:set:
+<input type="number" @bind:get="age" @bind:set="SetAge" />
+<h2>Age: @age</h2>
+ 
+@code {
+    int age = 18;
+    void SetAge(int value)
+    {
+        if (value > 0 && value < 110) age = value;
+    }
+}
+
+
+Обработка ошибки:
+@page "/404" 
+<h1>Resource Not Found</h1>
+
+app.UseStatusCodePagesWithReExecute("/404");
+
+Директива @layout - можно переустановить компонент компоновки:
+@layout BlazorApp.Components.Layouts.SecondLayout
+
+Чтобы использовать во многих компонентов: всё собираем в отделььную папку и создадим _Imports.razor, внутри него -> @layout BlazorApp.Components.Layouts.SecondLayout
+
+
+https://metanit.com/sharp/blazor/3.6.php - непонятно
+
+							Конфигурация
+в appsettings.json:
+{
+  "message": "Hello METANIT.COM",
+  "contacts": {
+    "phone": "+1234545678"
+  }  
+}
+
+чтобы получить данные:
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+ 
+<h2>@Configuration["message"]</h2>
+
